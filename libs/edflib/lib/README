@@ -1,0 +1,18 @@
+
+This makefile creates a shared library of EDFlib.
+
+usage:
+
+make
+
+sudo make install
+  the default install path is /usr/local/lib64 or /usr/local/lib in case of a 32bit architecture
+  the header file will go into /usr/local/include
+
+sudo make install PREFIX=/usr
+  will change the install path to /usr/lib64 or /usr/lib
+  the header file will go into /usr/include
+
+
+System requirements: GNU/Linux
+
