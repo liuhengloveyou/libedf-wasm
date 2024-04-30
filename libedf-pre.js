@@ -1,17 +1,26 @@
-
 ///////////////////////////////////////////////////////////////////////////////
 // wasm Module
 ///////////////////////////////////////////////////////////////////////////////
 Module.MKDIRED = false;
 Module.MOUNT_DIR = "/working";
+Module.current_edf_file = null;
+// 主worker的SharedArrayBuffer
+Module.sharedDataBuffer = null;
+// 主worker的SharedArrayBuffer中波形数据的指针
+Module.sharedDataBufferPtr = 0;
+
 
 Module.onRuntimeInitialized = () => {
-    console.log("Module.onRuntimeInitialized")
-    
-    postMessage({
-        id: 'loaded',
-    });
+    console.log("libedf Module.onRuntimeInitialized", Module)
 
+    if (!Module.MKDIRED) {
+        FS.mkdir(Module.MOUNT_DIR);
+        Module.MKDIRED = true;
+    }
+
+    postMessage({
+        method: 'loaded'
+    });
     // var myUint8Array = Module.getBytes()
     // console.log("myUint8Array>>>>>>>>>>>>>>>>>>", myUint8Array.byteOffset, myUint8Array.byteLength, myUint8Array);
     // Module.canvas = document.getElementById('canvas');
@@ -19,15 +28,9 @@ Module.onRuntimeInitialized = () => {
     // console.log("Module.onRuntimeInitialized", Module.canvas)
 }
 
-
-// 加载文件
+// 加载文件系统
 Module.mountFile = (file) => {
     console.log(">>>", Module.MKDIRED, Module.MOUNT_DIR, typeof (file))
-    
-    if (!Module.MKDIRED) {
-        FS.mkdir(Module.MOUNT_DIR);
-        Module.MKDIRED = true;
-    }
 
     let name = file.name;
     FS.mount(WORKERFS, { files: [file] }, Module.MOUNT_DIR);
@@ -35,54 +38,29 @@ Module.mountFile = (file) => {
     return Module.MOUNT_DIR + "/" + name;
 }
 
-Module.singleImage = (imgDataPtr) => {
-    const width = Module.HEAPU32[imgDataPtr];
-    const height = Module.HEAPU32[imgDataPtr + 1];
-    const duration = Module.HEAPU32[imgDataPtr + 2];
-    const imageBufferPtr = Module.HEAPU32[imgDataPtr + 3];
-    const imageBuffer = Module.HEAPU8.slice(imageBufferPtr, imageBufferPtr + width * height * 3);
-    Module._free(imgDataPtr);
-    Module._free(imageBufferPtr);
-
-    const imageDataBuffer = new Uint8ClampedArray(width * height * 4);
-
-    let j = 0;
-    for (let i = 0; i < imageBuffer.length; i++) {
-        if (i && i % 3 === 0) {
-            imageDataBuffer[j] = 255;
-            j += 1;
-        }
-
-        imageDataBuffer[j] = imageBuffer[i];
-        j += 1;
-    }
-    return {
-        width,
-        height,
-        duration,
-        imageDataBuffer,
-    };
-
-}
-
-
 ///////////////////////////////////////////////////////////////////////////////
-// web worker message handler
+// webworker message handler
 ///////////////////////////////////////////////////////////////////////////////
 onmessage = function (event) {
     const data = event.data;
-    console.log("wasm.worker.onmessage data::", data);
-        
-    switch (data.type) {
+    console.log("wasm.worker.onmessage::", data.method, data);
+    switch (data.method) {
         case "open": {
-            doOpenEdfFile(data.file);
+            doOpenEdfFile(data.file, data.buff, data.ptr);
             break;
         }
         case "read": {
-            doReadEdfFile(1, 100);
+            Module.sharedDataBuffer = data.buffer;
+            Module.sharedDataBufferPtr = data.ptr;
+            console.log("wasm.worker.shareBuffer::", Module.sharedDataBufferPtr, Module.sharedDataBuffer);
+            doReadOneDataRecord(data.rid);
             break;
         }
-        case "read_label": {
+        case "close": {
+            doCloseEdfFile();
+            break;
+        }
+        case "labels": {
             doReadLabel();
             break;
         }
@@ -91,20 +69,26 @@ onmessage = function (event) {
     }
 };
 
-function doOpenEdfFile(file)
-{
+function doOpenEdfFile(file) {
     const fn = Module.mountFile(file)
-    console.log("doOpenEdfFile::", fn)
-    Module.edf_open(fn);
+    const mate = Module.edf_open(fn);
+    console.log("doOpenEdfFile fn::", fn, mate, file)
+
+    self.postMessage({
+        method: 'opened',
+        param: mate,
+    });
 }
 
-function doReadEdfFile(s, n)
-{
-    Module.edf_read_datarecord(s, n)
+function doCloseEdfFile() {
+    Module.edf_close();
 }
 
-function doReadLabel()
-{
+function doReadOneDataRecord(rid) {
+    Module.edf_read_datarecord(rid)
+}
+
+function doReadLabel() {
     var labels = Module.get_labels()
     console.log("labels>>>>>>>>>>>>>>>>>>", labels.byteOffset, labels.byteLength, labels);
 }
@@ -132,25 +116,4 @@ function callFromC(myUint8Array) {
     // for (let i = 0; i < 40; i += 4 ) {
     //     console.log(">>>", dv.getFloat32(i))
     // }
-}
-
-const doCapture = (id, file) => {
-    const fn = Module.mountFile(file)
-    console.log("doCapture mountFile::", id, fn, file)
-
-    Module.capture(fn)
-    // Module.readFile(fn)
-    //let point = Module.getPoint();
-    //console.log("point>>>>>>>>>>>>>>>>>>", point)
-}
-
-const doPlayVideo = (id, file) => {
-    const fn = Module.mountFile(file)
-    console.log("doPlay mountFile::", id, fn, file)
-
-    Module.playVideo(id, fn)
-}
-
-const doPlayVideoByWebsocket = (id, url) => {
-    Module.playVideoByWebsocket(id, url);
 }

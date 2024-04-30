@@ -2,11 +2,12 @@ CC = emcc
 CXX = em++
 WEB_DIR = web
 EXE = $(WEB_DIR)/libedf.js
-SOURCES = main.cpp edf.c edflib.c
+EDFLIB = ./libs/edflib
+SOURCES = main.cpp edf.c $(EDFLIB)/edflib.c
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 UNAME_S := $(shell uname -s)
 CPPFLAGS =
-LDFLAGS = 
+LDFLAGS = -sENVIRONMENT='worker'
 EMS =
 
 ##---------------------------------------------------------------------
@@ -14,9 +15,10 @@ EMS =
 ##---------------------------------------------------------------------
 
 # ("EMS" options gets added to both CPPFLAGS and LDFLAGS, whereas some options are for linker only)
-EMS += -s DISABLE_EXCEPTION_CATCHING=1 -sFORCE_FILESYSTEM
-LDFLAGS += -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s NO_EXIT_RUNTIME
-LDFLAGS += -lembind -lworkerfs.js --pre-js pre.js --js-library library.js 
+EMS += -s DISABLE_EXCEPTION_CATCHING=1 
+LDFLAGS += -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s NO_EXIT_RUNTIME -sFORCE_FILESYSTEM
+LDFLAGS += -lembind -lworkerfs.js 
+LDFLAGS += --pre-js libedf-pre.js --js-library libedf-library.js 
 
 # Uncomment next line to fix possible rendering bugs with Emscripten version older then 1.39.0 (https://github.com/ocornut/imgui/issues/2877)
 #EMS += -s BINARYEN_TRAP_MODE=clamp
@@ -29,7 +31,7 @@ LDFLAGS += --no-heap-copy
 ## FINAL BUILD FLAGS
 ##---------------------------------------------------------------------
 
-CPPFLAGS += -I.
+CPPFLAGS += -I. -I$(EDFLIB)
 #CPPFLAGS += -g
 CPPFLAGS += -Wall -Wformat -Wextra -Wshadow -Wformat-nonliteral -Wformat-security -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -Os $(EMS)
 # LDFLAGS += --shell-file ./emscripten/shell_minimal.html
@@ -45,6 +47,9 @@ LDFLAGS += $(EMS)
 %.o:%.c
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
+%.o:$(EDFLIB)/%.c
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
 all: $(EXE)
 	@echo Build complete for $(EXE)
 
@@ -55,4 +60,4 @@ $(EXE): $(OBJS) $(WEB_DIR)
 	$(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
 clean:
-	rm -rf $(OBJS) $(WEB_DIR)/libedf.*
+	rm $(OBJS) $(WEB_DIR)/libedf.*

@@ -4,10 +4,10 @@
 #include "edflib.h"
 #include "edf.h"
 
+
 // Main code
 int main(int, char**)
 { 
-
     //const char *fn = "./data/chb01_01.edf";
     // int rst = edf_open(fn);
     // if (rst) {
